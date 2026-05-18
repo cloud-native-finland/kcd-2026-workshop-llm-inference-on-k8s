@@ -81,3 +81,11 @@ routerSpec:
     httpGet:
       path: /health
       port: router-port
+
+# Deploy the chart's bundled Grafana dashboards as ConfigMaps labeled
+# `grafana_dashboard: "1"` in this namespace. The cluster's Grafana runs a
+# sidecar configured (in the infra repo) to watch every namespace for that
+# label, so they appear in the shared Grafana under Dashboards → General
+# within a minute of `helm install`.
+grafanaDashboards:
+  enabled: true

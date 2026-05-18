@@ -27,10 +27,18 @@ Every script in this repo reads `MY_NAMESPACE`.
 ./scripts/01-deploy.sh
 ```
 
-That script does just two things — read it before you run it, it's short:
+That script does four things — read it before you run it, it's short:
 
 1. `helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml`
 2. `kubectl -n $MY_NAMESPACE apply -f helm/keda-scaled-object.yaml`
+3. `kubectl -n $MY_NAMESPACE apply -f helm/prometheus-rule.yaml`
+4. `kubectl -n $MY_NAMESPACE apply -f helm/pdb.yaml`
+
+(1) installs the engine + router. (2) tells KEDA to scale on queue depth.
+(3) wires per-namespace alerts into the cluster's Prometheus. (4) protects
+your engine from full-outage voluntary disruptions like a node drain. The
+last three are all per-group artifacts the workshop cluster's RBAC lets
+you create in your own namespace.
 
 The slow part is the engine pod pulling the vLLM image (~12 GB) and
 downloading the model weights. Give it a few minutes.
@@ -81,6 +89,7 @@ Leave this running in a separate terminal:
 - `localhost:30080` → your router (OpenAI-compatible API)
 - `localhost:3000`  → Grafana (admin / prom-operator)
 - `localhost:9090`  → Prometheus
+- `localhost:9093`  → Alertmanager
 
 ## Smoke-test
 

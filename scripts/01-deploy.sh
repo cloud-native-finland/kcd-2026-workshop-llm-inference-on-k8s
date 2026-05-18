@@ -28,8 +28,16 @@ echo "== KEDA ScaledObject (autoscaling on queue depth) =="
 kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/keda-scaled-object.yaml"
 
 echo
+echo "== PrometheusRule (alerts on queue depth + engine readiness) =="
+kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/prometheus-rule.yaml"
+
+echo
+echo "== PodDisruptionBudget (engine stays up during voluntary disruptions) =="
+kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/pdb.yaml"
+
+echo
 echo "== Resources in $MY_NAMESPACE =="
-kubectl -n "$MY_NAMESPACE" get pods,svc,scaledobject 2>&1 | head -20
+kubectl -n "$MY_NAMESPACE" get pods,svc,scaledobject,prometheusrule,pdb 2>&1 | head -20
 
 echo
 echo "Next steps:"

@@ -2,23 +2,24 @@
 
 We don't ship custom dashboards in this repo. The chart's
 `grafanaDashboards.enabled: true` flag (set in
-[`../helm/values-workshop.yaml`](../helm/values-workshop.yaml)) deploys three
-ConfigMaps with the label `grafana_dashboard: "1"`:
+[`../helm/values-workshop.yaml`](../helm/values-workshop.yaml)) deploys two
+ConfigMaps with the label `grafana_dashboard: "1"` **into your group's
+namespace**:
 
 - **vLLM** — TTFT, throughput, queue depth, KV cache usage, prefix-cache hits
-- **vLLM model metrics** — per-model latency / throughput
 - **LMCache** — KV cache offloading (idle in this workshop since we disabled
   LMCache)
 
-`kube-prometheus-stack`'s Grafana runs a sidecar that watches for ConfigMaps
-with that label and imports them on creation. So after running
-`scripts/01-install-stack.sh` they appear in Grafana under
-**Dashboards → vLLM Production Stack** within a minute.
+The cluster's Grafana (in the `monitoring` namespace) runs a sidecar
+configured by the workshop infra repo to search **all** namespaces for
+ConfigMaps with that label and import them on the fly. So after running
+`scripts/01-deploy.sh` they appear in Grafana under
+**Dashboards → General** within a minute.
 
 If you want to export one to JSON for your own use:
 
 ```bash
-kubectl -n monitoring get cm -l grafana_dashboard=1 -o yaml > dashboards.yaml
+kubectl -n "$MY_NAMESPACE" get cm -l grafana_dashboard=1 -o yaml > dashboards.yaml
 ```
 
 Upstream sources:

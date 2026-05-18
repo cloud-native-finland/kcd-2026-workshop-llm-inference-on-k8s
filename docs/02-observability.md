@@ -53,4 +53,27 @@ histogram_quantile(
 )
 ```
 
+## Alerts in your namespace
+
+`scripts/01-deploy.sh` also applies a `PrometheusRule` from
+[`helm/prometheus-rule.yaml`](../helm/prometheus-rule.yaml) into your
+namespace. It defines two alerts:
+
+| Alert | Severity | Fires when |
+|---|---|---|
+| `vLLMQueueDeep`   | warning  | `vllm:num_requests_waiting > 5` sustained for 1 min |
+| `vLLMEngineDown`  | critical | No vLLM engine replicas are Ready for 30 s |
+
+These will sit silent at idle. The first one is interesting because it
+fires on **exactly the same signal KEDA scales on** — so during Scenario 2
+you'll see KEDA scale up *and* the alert fire (and then clear once a
+second replica drains the queue, or stay firing if there's no GPU spare).
+
+The cluster's Prometheus is configured with `enforcedNamespaceLabel`, so
+the operator silently rewrites every expression in your rule to add
+`{namespace="<your-ns>"}` — your alerts can only see your own group's
+metrics, no matter what you write.
+
+See firing alerts at <http://localhost:9093/#/alerts> (Alertmanager UI).
+
 Next: [03 — Scenario 1: Chat](03-chat.md)

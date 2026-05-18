@@ -1,0 +1,49 @@
+# PrometheusRule — alerts that fire on your vLLM deployment.
+#
+# The cluster's Prometheus operator watches every namespace for
+# PrometheusRule resources, so applying this in your namespace wires it up
+# automatically — no central config to edit.
+#
+# Two rules:
+#   - vLLMQueueDeep      warning,  triggers on the same signal KEDA scales on
+#   - vLLMEngineDown     critical, triggers if no engine replicas are Ready
+#
+# The cluster's Prometheus has `enforcedNamespaceLabel: namespace` set, so
+# the operator auto-rewrites every expression below to filter
+# `{namespace="<this-rule's-namespace>"}` — your alerts can only fire on
+# your own group's data.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vllm-qwen05b-rules
+  labels:
+    app.kubernetes.io/part-of: vllm-stack
+spec:
+  groups:
+    - name: vllm-qwen05b.rules
+      rules:
+        - alert: vLLMQueueDeep
+          expr: sum(vllm:num_requests_waiting) > 5
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "vLLM queue is deep ({{ $value }} waiting requests)"
+            description: |
+              Requests have been waiting in the vLLM queue for over a minute.
+              KEDA scales on this same signal — if your max replica count
+              has already been reached, this alert is telling you that the
+              workload needs more GPU than the cluster currently provides.
+
+        - alert: vLLMEngineDown
+          expr: sum(kube_deployment_status_replicas_ready{deployment=~"vllm-.*-deployment-vllm"}) == 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "No vLLM engine replicas are Ready"
+            description: |
+              Every vLLM engine pod in your namespace is non-Ready. Check
+              `kubectl get pods` and `kubectl describe deployment` to see
+              whether they're crash-looping, image-pulling, or waiting for
+              a GPU.
