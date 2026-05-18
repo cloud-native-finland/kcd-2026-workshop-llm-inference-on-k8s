@@ -20,6 +20,9 @@ servingEngineSpec:
   nodeSelector:
     app: vllm-inference
     nvidia.com/gpu: present
+    cloud.google.com/gke-accelerator: nvidia-l4
+    cloud.google.com/gke-gpu-sharing-strategy: "time-sharing"
+    cloud.google.com/gke-max-shared-clients-per-gpu: "4"
   tolerations:
     - key: "nvidia.com/gpu"
       operator: "Equal"
