@@ -46,9 +46,16 @@ export MY_NAMESPACE=group-XX     # what you were assigned
   to load in seconds, so we spend our time on the *system*, not on weights.
 - **Router** with prefix-aware routing — Scenario 1 actually exercises it.
 - **KEDA ScaledObject** scaling on `vllm:num_requests_waiting` (queue depth).
+- **PrometheusRule** with two alerts (`vLLMQueueDeep`, `vLLMEngineDown`) —
+  auto-tenant-scoped to your namespace by the Prometheus operator.
+- **PodDisruptionBudget** keeping at least one engine pod available across
+  voluntary disruptions.
+- **Grafana dashboard ConfigMaps** (chart-bundled) — the cluster's Grafana
+  sidecar imports them on the fly.
 
-The Grafana and Prometheus you use are **cluster-wide** — every group sees
-the same dashboards. Yours will show your namespace's pods.
+The Grafana, Prometheus, and Alertmanager you use are **cluster-wide** —
+every group sees the same Grafana, with their own dashboards and alerts
+visible alongside everyone else's.
 
 ## Layout
 

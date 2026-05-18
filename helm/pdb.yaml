@@ -1,0 +1,29 @@
+# PodDisruptionBudget — protect against full-outage voluntary disruptions.
+#
+# A PDB tells the eviction API how many engine replicas have to stay
+# Available during *voluntary* events: node drain, cluster upgrade, etc.
+# It does NOT help against involuntary disruptions (node crash, OOM).
+#
+# Why minAvailable=1 for a single-replica workshop deployment? Because the
+# point is to make the trade-off visible. With one replica and
+# minAvailable=1, a `kubectl drain` of the GPU node will block until you
+# either scale up to 2 replicas first (and have spare GPU capacity), or
+# explicitly accept downtime by deleting the PDB. That tension — "we can't
+# safely drain this node without more GPU" — is the real production
+# planning question this artifact surfaces.
+#
+# The selector matches the engine pods, NOT the router. Router replicas
+# don't hold GPU state and can be cycled freely.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-qwen05b-engine
+  labels:
+    app.kubernetes.io/part-of: vllm-stack
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: qwen05b
+      app.kubernetes.io/component: serving-engine
+      app.kubernetes.io/part-of: vllm-stack

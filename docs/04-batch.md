@@ -62,6 +62,22 @@ The script prints progress every 5s.
    cluster you'd pair this with **cluster autoscaling** that adds GPU
    nodes when pods stay Pending.
 
+## And the alert
+
+Keep an eye on <http://localhost:9093/#/alerts>. The `vLLMQueueDeep` alert
+you applied during deploy fires on the same `vllm:num_requests_waiting > 5`
+signal that KEDA scales on, with the same 1-minute window. So during the
+burst you should see, in order:
+
+1. KEDA's HPA flip and request a second replica.
+2. The `vLLMQueueDeep` alert move from `Pending` → `Firing` in Alertmanager.
+3. *Either* the queue drains (second replica got a GPU) and the alert
+   clears, *or* the second replica is stuck Pending and the alert stays
+   firing — telling you the workload exceeds available capacity.
+
+That sequence is the whole story of "metric-driven autoscaling has a
+ceiling, and your alerts should know about it."
+
 ## Try this
 
 Open Grafana → vLLM dashboard. Compare what the per-replica throughput

@@ -60,8 +60,12 @@ That has knock-on effects:
   see the prefix cache hit rate collapse — a great negative result.
 - Set the KEDA `threshold` to `1` and re-run Scenario 2. KEDA becomes
   twitchier. Read the HPA describe output and see how it reasons.
-- Read the bundled Grafana dashboard JSON — `grafana/` has it exported.
-  Tweak a panel.
+- Export the bundled Grafana dashboard JSON from your namespace
+  (`kubectl -n $MY_NAMESPACE get cm -l grafana_dashboard=1 -o yaml`),
+  tweak a panel, re-apply. The sidecar reloads it within a minute.
+- Try `kubectl -n $MY_NAMESPACE drain` against the GPU node and watch the
+  PDB block the eviction. Scale the engine to 2 replicas first if you
+  want it to succeed.
 
 ## Reading list
 
@@ -74,14 +78,11 @@ That has knock-on effects:
 
 ## Cleanup
 
-Stack only (keeps the cluster):
+Tear your slice down (keeps the shared cluster intact):
 
 ```bash
 ./scripts/99-teardown.sh
 ```
 
-If you provisioned your own GCP cluster following `testing/setup-gke.sh`:
-
-```bash
-./testing/teardown-gke.sh
-```
+The cluster admin handles cluster teardown — out of your namespace's
+reach.
