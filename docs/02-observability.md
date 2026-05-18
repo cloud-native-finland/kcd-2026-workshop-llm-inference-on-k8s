@@ -1,18 +1,25 @@
 # 2 — Observability
 
 Open Grafana at <http://localhost:3000> — login `admin` / `prom-operator`
-(default kube-prom-stack password; the workshop cluster doesn't change it).
+(the workshop cluster's default; doesn't get rotated for a 2-hour run).
 
 ## Where the data comes from
 
 Every vLLM pod — yours and every other group's — exposes a `/metrics`
-endpoint on its own port. The cluster's Prometheus is configured with an
-`additionalServiceMonitors` rule that auto-picks up any vLLM Helm release
-in any namespace, so your engine and router start getting scraped the
-moment they go Ready.
+endpoint on its own port. The cluster runs **GKE Managed Prometheus
+(GMP)** with auto-app-monitoring at cluster scope, so GMP detects each
+vLLM Deployment as it comes up and starts scraping automatically. No
+per-group `ServiceMonitor` or `PodMonitoring` to apply.
 
-If you ever wonder "is Prometheus actually scraping my pods?" —
-<http://localhost:9090/targets> and search for your namespace.
+Metrics live in Cloud Monitoring under the hood. Grafana queries them
+through the in-cluster **GMP query frontend** (`gmp-frontend.monitoring.svc`),
+which speaks the standard Prometheus query API. From Grafana's
+perspective, it's talking to "a Prometheus" — same panels and queries
+work the same way.
+
+If you ever wonder "is GMP actually scraping my pods?" — port-forward
+the GMP frontend (`localhost:9090`) and visit `/api/v1/targets`, or just
+run a `vllm:num_requests_running` query in Grafana's Explore tab.
 
 ## What to look at at idle
 
@@ -33,9 +40,9 @@ next three scenarios against.
 
 ## A few useful Prometheus queries
 
-Paste into <http://localhost:9090> or Grafana's Explore tab. Add a
-`{namespace="$MY_NAMESPACE"}` filter to isolate your group's traffic from
-everyone else's:
+Paste into <http://localhost:9090> (the GMP frontend, port-forwarded) or
+Grafana's Explore tab. Add a `{namespace="$MY_NAMESPACE"}` filter to
+isolate your group's traffic from everyone else's:
 
 ```promql
 vllm:num_requests_waiting{namespace="group-XX"}
@@ -55,25 +62,32 @@ histogram_quantile(
 
 ## Alerts in your namespace
 
-`scripts/01-deploy.sh` also applies a `PrometheusRule` from
-[`helm/prometheus-rule.yaml`](../helm/prometheus-rule.yaml) into your
-namespace. It defines two alerts:
+`scripts/01-deploy.sh` also applies a GMP `Rules` resource from
+[`helm/gmp-rules.yaml`](../helm/gmp-rules.yaml) into your namespace. It
+defines two alerts:
 
 | Alert | Severity | Fires when |
 |---|---|---|
-| `vLLMQueueDeep`   | warning  | `vllm:num_requests_waiting > 5` sustained for 1 min |
-| `vLLMEngineDown`  | critical | No vLLM engine replicas are Ready for 30 s |
+| `VLLMQueueDeep` | warning  | `vllm:num_requests_waiting > 5` sustained for 1 min |
+| `VLLMEngineDown` | critical | No vLLM engine replicas are Ready for 30 s |
 
 These will sit silent at idle. The first one is interesting because it
-fires on **exactly the same signal KEDA scales on** — so during Scenario 2
-you'll see KEDA scale up *and* the alert fire (and then clear once a
-second replica drains the queue, or stay firing if there's no GPU spare).
+fires on **exactly the same signal KEDA scales on** — so during
+Scenario 2 you'll see KEDA scale up *and* the alert fire (and then clear
+once a second replica drains the queue, or stay firing if there's no GPU
+slot spare).
 
-The cluster's Prometheus is configured with `enforcedNamespaceLabel`, so
-the operator silently rewrites every expression in your rule to add
-`{namespace="<your-ns>"}` — your alerts can only see your own group's
-metrics, no matter what you write.
+GMP namespace-scoped `Rules` are auto-scoped by the GMP operator — your
+alerts can only see your own group's metrics regardless of what the
+query says.
 
-See firing alerts at <http://localhost:9093/#/alerts> (Alertmanager UI).
+Check rule status with:
+
+```bash
+kubectl -n "$MY_NAMESPACE" get rules.monitoring.googleapis.com -o yaml
+```
+
+Or surface firing alerts in the Google Cloud Console under
+**Monitoring → Alerting** if you have GCP IAM for the project.
 
 Next: [03 — Scenario 1: Chat](03-chat.md)

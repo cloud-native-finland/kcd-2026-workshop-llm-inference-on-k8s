@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Deploy vLLM into your group's namespace.
 #
-# The cluster admin has pre-installed kube-prometheus-stack and KEDA
-# cluster-wide. You only deploy the vLLM engine + router into your namespace.
+# The cluster admin has pre-installed KEDA + Grafana + GKE Managed
+# Prometheus cluster-wide. You only deploy the vLLM engine + router and
+# the per-namespace autoscaling/alerts/PDB artifacts.
 #
 # Required:
 #   MY_NAMESPACE   your assigned group namespace (e.g. group-alpha)
@@ -28,8 +29,8 @@ echo "== KEDA ScaledObject (autoscaling on queue depth) =="
 kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/keda-scaled-object.yaml"
 
 echo
-echo "== PrometheusRule (alerts on queue depth + engine readiness) =="
-kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/prometheus-rule.yaml"
+echo "== GMP Rules (alerts on queue depth + engine readiness) =="
+kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/gmp-rules.yaml"
 
 echo
 echo "== PodDisruptionBudget (engine stays up during voluntary disruptions) =="
@@ -37,7 +38,7 @@ kubectl -n "$MY_NAMESPACE" apply -f "$REPO_ROOT/helm/pdb.yaml"
 
 echo
 echo "== Resources in $MY_NAMESPACE =="
-kubectl -n "$MY_NAMESPACE" get pods,svc,scaledobject,prometheusrule,pdb 2>&1 | head -20
+kubectl -n "$MY_NAMESPACE" get pods,svc,scaledobject,rules.monitoring.googleapis.com,pdb 2>&1 | head -20
 
 echo
 echo "Next steps:"

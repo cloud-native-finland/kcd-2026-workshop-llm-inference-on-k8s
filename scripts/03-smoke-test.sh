@@ -4,7 +4,7 @@
 set -euo pipefail
 
 BASE="${BASE:-http://localhost:30080}"
-MODEL="${MODEL:-Qwen/Qwen2.5-0.5B-Instruct}"
+MODEL="${MODEL:-Qwen/Qwen3-0.6B}"
 
 echo "== /v1/models =="
 curl -fsS "$BASE/v1/models" | jq .

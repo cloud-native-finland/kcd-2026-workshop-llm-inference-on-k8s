@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import httpx
 
 DEFAULT_BASE = os.environ.get("VLLM_BASE", "http://localhost:30080")
-DEFAULT_MODEL = os.environ.get("VLLM_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+DEFAULT_MODEL = os.environ.get("VLLM_MODEL", "Qwen/Qwen3-0.6B")
 
 
 @dataclass

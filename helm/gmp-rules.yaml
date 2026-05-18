@@ -1,0 +1,51 @@
+# GMP Rules — alerts that fire on your vLLM deployment.
+#
+# Apply this in your namespace; the GMP operator picks it up and the
+# rules start evaluating against GMP-stored metrics. Each rule's
+# expression is auto-scoped to your namespace by the operator, so your
+# alerts can only fire on your own group's data.
+#
+# Two rules:
+#   - VLLMQueueDeep   warning,  triggers on the same signal KEDA scales on
+#   - VLLMEngineDown  critical, triggers if no engine replicas are Ready
+#
+# This is the GKE managed-Prometheus equivalent of a PrometheusRule —
+# same idea, different CRD (monitoring.googleapis.com/v1 Rules instead
+# of monitoring.coreos.com/v1 PrometheusRule).
+apiVersion: monitoring.googleapis.com/v1
+kind: Rules
+metadata:
+  name: vllm-qwen3-rules
+  labels:
+    app.kubernetes.io/part-of: vllm-stack
+spec:
+  groups:
+    - name: vllm-qwen3.rules
+      interval: 30s
+      rules:
+        - alert: VLLMQueueDeep
+          expr: sum(vllm:num_requests_waiting) > 5
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "vLLM queue is deep ({{ $value }} waiting requests)"
+            description: |
+              Requests have been waiting in the vLLM queue for over a
+              minute. KEDA scales on this same signal — if your max
+              replica count has already been reached, this alert is
+              telling you the workload needs more GPU than the cluster
+              currently provides.
+
+        - alert: VLLMEngineDown
+          expr: sum(kube_deployment_status_replicas_ready{deployment=~"vllm-qwen3-deployment-vllm"}) == 0
+          for: 30s
+          labels:
+            severity: critical
+          annotations:
+            summary: "No vLLM engine replicas are Ready"
+            description: |
+              Every vLLM engine pod in your namespace is non-Ready.
+              Check `kubectl get pods` and `kubectl describe deployment`
+              to see whether they're crash-looping, image-pulling, or
+              waiting for a GPU slot to free up.

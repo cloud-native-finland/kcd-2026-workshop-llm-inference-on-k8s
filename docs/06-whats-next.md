@@ -54,8 +54,8 @@ That has knock-on effects:
 ## Things to try after the workshop
 
 - Swap the model. Edit `helm/values-workshop.yaml`, change `modelURL` to
-  e.g. `Qwen/Qwen2.5-1.5B-Instruct`, `helm upgrade`. Watch the pod restart
-  and a bigger model load.
+  e.g. `Qwen/Qwen2.5-1.5B-Instruct`, re-upload it to the GCS model bucket,
+  `helm upgrade`. Watch the pod restart and a bigger model load.
 - Turn `routingLogic` to `roundrobin` and re-run Scenario 1. You should
   see the prefix cache hit rate collapse — a great negative result.
 - Set the KEDA `threshold` to `1` and re-run Scenario 2. KEDA becomes
