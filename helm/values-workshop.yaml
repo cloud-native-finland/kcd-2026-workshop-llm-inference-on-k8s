@@ -71,21 +71,20 @@ servingEngineSpec:
         - name: HF_HUB_OFFLINE
           value: "1"
 
-      # Compute-class + GPU sharing labels pin this to the Spot L4 pool
-      # provisioned by the infra repo's `vllm-gpu-l4-spot` ComputeClass.
-      # GPU model + count are declared by the ComputeClass itself; the pod
-      # only opts into time-sharing.
+      # ComputeClass selects the Spot L4 pool (defined in the infra repo
+      # as `vllm-gpu-l4-spot`). GPU time-sharing config — strategy + max
+      # clients — lives in the ComputeClass, NOT on the pod. Autopilot's
+      # autoprovisioner reads the sharing config from the ComputeClass
+      # and labels the new node accordingly; Pods that try to also
+      # select `cloud.google.com/gke-gpu-sharing-strategy` themselves
+      # blow up with `Pod didn't trigger scale-up` because the
+      # autoprovisioner won't manifest a node labeled that way unless
+      # the ComputeClass says so.
       nodeSelectorTerms:
         - matchExpressions:
             - key: cloud.google.com/compute-class
               operator: In
               values: [vllm-gpu-l4-spot]
-            - key: cloud.google.com/gke-gpu-sharing-strategy
-              operator: In
-              values: [time-sharing]
-            - key: cloud.google.com/gke-max-shared-clients-per-gpu
-              operator: In
-              values: ["8"]
 
       vllmConfig:
         v0: "0"
