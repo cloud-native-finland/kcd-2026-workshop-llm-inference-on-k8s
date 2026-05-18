@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.kubeconfig
+.DS_Store
+
+# Local-only scripts (not for attendees)
+testing/local-*.sh

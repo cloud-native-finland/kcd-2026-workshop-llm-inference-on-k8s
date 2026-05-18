@@ -1,0 +1,29 @@
+# KEDA ScaledObject — autoscale the vLLM deployment on queue depth.
+#
+# Targets the deployment created by the Helm chart for the model named
+# "qwen05b" in values-workshop.yaml (chart names it vllm-qwen05b-deployment-vllm).
+#
+# minReplicaCount=1 / maxReplicaCount=2 means Scenario 2 (batch burst) will
+# scale 1 → 2 when ≥ 5 requests sit in the vLLM queue. The workshop cluster
+# needs at least 2 GPUs for this to fully demonstrate; on a single-GPU test
+# cluster the second replica will stay Pending — that itself is a useful
+# teaching moment about GPU capacity.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: vllm-qwen05b
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: vllm-qwen05b-deployment-vllm
+  minReplicaCount: 1
+  maxReplicaCount: 2
+  pollingInterval: 15
+  cooldownPeriod: 180
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        metricName: vllm:num_requests_waiting
+        query: sum(vllm:num_requests_waiting)
+        threshold: "5"
