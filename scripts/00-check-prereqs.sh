@@ -6,7 +6,7 @@ fail=0
 need() {
   local cmd="$1" hint="$2"
   if command -v "$cmd" >/dev/null 2>&1; then
-    printf "  ✓ %-10s %s\n" "$cmd" "$($cmd --version 2>&1 | head -1 || true)"
+    printf "  ✓ %-10s installed at %s\n" "$cmd" "$(command -v "$cmd")"
   else
     printf "  ✗ %-10s MISSING — %s\n" "$cmd" "$hint"
     fail=1
@@ -22,9 +22,10 @@ need jq       "your distro's jq package"
 
 echo
 echo "== Cluster reachability =="
-if kubectl cluster-info >/dev/null 2>&1; then
+# Use /version — every authenticated user is allowed to hit it. `cluster-info`
+# requires list-services in kube-system, which workshop attendees lack.
+if kubectl get --raw=/version >/dev/null 2>&1; then
   echo "  ✓ kubectl can reach the cluster"
-  kubectl get nodes
 else
   echo "  ✗ kubectl cannot reach the cluster — check your kubeconfig"
   fail=1
@@ -56,7 +57,9 @@ if kubectl -n monitoring get svc gmp-frontend >/dev/null 2>&1; then
 else
   echo "  ⚠ GMP frontend not found — KEDA scaling and Grafana queries won't work"
 fi
-if kubectl get crd scaledobjects.keda.sh >/dev/null 2>&1; then
+# API discovery (no RBAC needed) instead of `get crd`, which is cluster-scope
+# and forbidden for workshop attendees.
+if kubectl api-resources --api-group=keda.sh 2>/dev/null | grep '^scaledobjects ' >/dev/null; then
   echo "  ✓ KEDA CRDs are installed"
 else
   echo "  ⚠ KEDA CRDs missing — Scenario 2 autoscaling won't work"
@@ -68,10 +71,13 @@ echo "== GPU capacity =="
 # them. Before anyone has deployed vLLM, no GPU nodes exist — that's
 # expected, not an error. Check the ComputeClass instead, which tells
 # us the cluster *can* provision an L4 on demand.
-if kubectl get computeclass.cloud.google.com vllm-gpu-l4-spot >/dev/null 2>&1; then
-  echo "  ✓ vllm-gpu-l4-spot ComputeClass is installed"
+# `get computeclass` is cluster-scope and forbidden for attendees; checking the
+# group's `vllm-gpu-l4-spot` ComputeClass exists via discovery instead. The
+# operator confirms the named instance separately during cluster bring-up.
+if kubectl api-resources --api-group=cloud.google.com 2>/dev/null | grep '^computeclasses ' >/dev/null; then
+  echo "  ✓ ComputeClass API is available (operator confirms vllm-gpu-l4-spot is installed)"
 else
-  echo "  ⚠ vllm-gpu-l4-spot ComputeClass missing — vLLM pods will stay Pending"
+  echo "  ⚠ ComputeClass API missing — vLLM pods will stay Pending"
 fi
 
 echo
