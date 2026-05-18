@@ -14,10 +14,13 @@
 # Install (replace $MY_NAMESPACE with the namespace your group was assigned):
 #   helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml
 #
-# Note on sharing: the workshop cluster has ONE physical L4 GPU, time-sliced
+# Note on sharing: the workshop cluster has ONE physical T4 GPU, time-sliced
 # 8 ways. Up to 8 engine pods (yours + everyone else's) can land on it. Each
-# pod reserves ~3.6 GiB VRAM (gpuMemoryUtilization=0.15 of 24 GiB), enough
-# for Qwen3-0.6B weights + KV cache for the workshop's request volume.
+# pod reserves ~2.4 GiB VRAM (gpuMemoryUtilization=0.15 of 16 GiB) on paper;
+# Qwen3-0.6B's real footprint with KV cache is well under that, so the math
+# works at workshop request volumes.
+#
+# T4 is Turing — no bfloat16 support, so vllmConfig.dtype must be float16.
 
 servingEngineSpec:
   # Autopilot rejects custom runtime classes.
@@ -33,9 +36,9 @@ servingEngineSpec:
 
       replicaCount: 1
 
-      # Sized to fit alongside ~7 other engines on one g2-standard-12
-      # (12 vCPU, 48 GiB). 500m CPU / 2 GiB RAM is plenty for Qwen3-0.6B
-      # steady-state (token encode/decode + scheduling).
+      # Sized to fit alongside ~7 other engines on one n1-standard-8
+      # (8 vCPU / 30 GiB) with a T4. 500m CPU / 2 GiB RAM is plenty for
+      # Qwen3-0.6B steady-state (token encode/decode + scheduling).
       requestCPU: 500m
       requestMemory: "2Gi"
       requestGPU: 1
@@ -91,10 +94,11 @@ servingEngineSpec:
         enablePrefixCaching: true
         enableChunkedPrefill: true
         maxModelLen: 8192
-        dtype: "bfloat16"
+        # T4 is Turing (compute 7.5) — no native bfloat16, so use float16.
+        dtype: "float16"
         tensorParallelSize: 1
-        # 8 × 0.15 = 1.2 of L4 24 GiB. Oversubscribed on paper, but
-        # Qwen3-0.6B's actual VRAM footprint is well under 3 GiB even with
+        # 8 × 0.15 = 1.2 of T4 16 GiB. Oversubscribed on paper, but
+        # Qwen3-0.6B's actual VRAM footprint is well under 2 GiB even with
         # KV cache, so the math works out at workshop request volumes.
         gpuMemoryUtilization: 0.15
         extraArgs: []
