@@ -1,0 +1,83 @@
+# vLLM Production Stack — workshop values for ONE attendee group.
+#
+# The workshop infra repo (kcd-26-ws-llmsonk8s-infra) provisions the cluster
+# with two node pools:
+#   - mgmt nodes labeled  app=mgmt-node
+#   - GPU  nodes labeled  app=vllm-inference  (taint nvidia.com/gpu=present:NoSchedule)
+# and pre-installs kube-prometheus-stack + KEDA cluster-wide. The cluster's
+# Prometheus already has an `additionalServiceMonitors` rule that scrapes any
+# vLLM Helm release based on its default labels, so we do NOT enable a
+# per-release ServiceMonitor here.
+#
+# Install (replace $MY_NAMESPACE with the namespace your group was assigned):
+#   helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml
+
+servingEngineSpec:
+  runtimeClassName: ""
+  # Engine runs on the GPU node pool. The cluster has only one GPU today,
+  # so each group's deployment will land on it (KEDA + GPU time-sharing
+  # decide who gets to run when contention is high).
+  nodeSelector:
+    app: vllm-inference
+    nvidia.com/gpu: present
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Equal"
+      value: "present"
+      effect: "NoSchedule"
+
+  modelSpec:
+    - name: "qwen05b"
+      enabled: true
+      runtimeClassName: ""
+      repository: "vllm/vllm-openai"
+      tag: "latest"
+      modelURL: "Qwen/Qwen2.5-0.5B-Instruct"
+
+      replicaCount: 1
+
+      requestCPU: 4
+      requestMemory: "12Gi"
+      requestGPU: 1
+      requestGPUType: "nvidia.com/gpu"
+
+      pvcStorage: "20Gi"
+      pvcAccessMode:
+        - ReadWriteOnce
+
+      vllmConfig:
+        v0: "0"
+        enablePrefixCaching: true
+        enableChunkedPrefill: true
+        maxModelLen: 4096
+        dtype: "bfloat16"
+        tensorParallelSize: 1
+        gpuMemoryUtilization: 0.85
+        extraArgs: []
+
+      lmcacheConfig:
+        enabled: false
+
+routerSpec:
+  replicaCount: 1
+  # Router doesn't need a GPU — schedule onto the management node pool so
+  # the GPU is reserved exclusively for the engine.
+  nodeSelector:
+    app: mgmt-node
+  routingLogic: "prefixaware"
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+  # Chart default failureThreshold=3 + periodSeconds=5 gives the router only
+  # ~20s to bind to :8000 on cold start. The image is 5.3 GB and aiohttp/
+  # service-discovery init pushes that out to ~30 s. Give it 24×5 s = 120 s.
+  startupProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 24
+    httpGet:
+      path: /health
+      port: router-port
