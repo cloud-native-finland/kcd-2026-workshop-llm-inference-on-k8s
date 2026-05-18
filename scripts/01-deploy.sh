@@ -19,9 +19,14 @@ echo "== Deploying vLLM into namespace: $MY_NAMESPACE =="
 helm repo add vllm https://vllm-project.github.io/production-stack >/dev/null 2>&1 || true
 helm repo update vllm >/dev/null
 
+# --skip-crds: the chart ships a LoRAAdapter CRD that requires cluster-scope
+# patch permissions to install. Workshop attendees only have edit-in-their-
+# namespace, and the workshop doesn't use LoRA, so skip it. If you later want
+# LoRA, the cluster admin installs the CRD once and you can drop this flag.
 helm upgrade --install vllm vllm/vllm-stack \
   --namespace "$MY_NAMESPACE" \
   -f "$REPO_ROOT/helm/values-workshop.yaml" \
+  --skip-crds \
   --wait --timeout 15m
 
 echo
