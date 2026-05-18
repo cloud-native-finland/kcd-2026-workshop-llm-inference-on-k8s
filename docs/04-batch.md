@@ -24,7 +24,7 @@ Open a second terminal and watch the autoscaler do its thing:
 kubectl -n $MY_NAMESPACE get hpa -w
 ```
 
-You'll see the KEDA-managed HPA: `keda-hpa-vllm-qwen05b`. The `TARGETS`
+You'll see the KEDA-managed HPA: `keda-hpa-vllm-qwen3`. The `TARGETS`
 column shows current queue depth / threshold.
 
 In another pane, watch the pods:
@@ -39,7 +39,7 @@ kubectl -n $MY_NAMESPACE get pods -w
 load/.venv/bin/python load/scenario2_batch.py --count 60 --concurrency 20
 ```
 
-> **A note on workshop sizing.** Qwen2.5-0.5B on an L4 is *fast* — at the
+> **A note on workshop sizing.** Qwen3-0.6B on an L4 is *fast* — at the
 > defaults above the burst can drain in 2-3 seconds and queue depth may
 > never cross the KEDA threshold. If you don't see the autoscaler kick in,
 > bump `--count 200 --concurrency 40` (or even higher) until the engine
@@ -64,16 +64,18 @@ The script prints progress every 5s.
 
 ## And the alert
 
-Keep an eye on <http://localhost:9093/#/alerts>. The `vLLMQueueDeep` alert
-you applied during deploy fires on the same `vllm:num_requests_waiting > 5`
-signal that KEDA scales on, with the same 1-minute window. So during the
-burst you should see, in order:
+The `VLLMQueueDeep` alert you applied during deploy fires on the same
+`vllm:num_requests_waiting > 5` signal that KEDA scales on, with the
+same 1-minute window. So during the burst you should see, in order:
 
 1. KEDA's HPA flip and request a second replica.
-2. The `vLLMQueueDeep` alert move from `Pending` → `Firing` in Alertmanager.
-3. *Either* the queue drains (second replica got a GPU) and the alert
-   clears, *or* the second replica is stuck Pending and the alert stays
-   firing — telling you the workload exceeds available capacity.
+2. The rule's state move from `Pending` → `Firing` (visible via
+   `kubectl -n $MY_NAMESPACE get rules.monitoring.googleapis.com vllm-qwen3-rules -o yaml`,
+   in the per-rule `state` and `firingAlerts` fields).
+3. *Either* the queue drains (second replica got a time-shared GPU slot)
+   and the alert clears, *or* the second replica is stuck Pending and
+   the alert stays firing — telling you the workload exceeds available
+   capacity.
 
 That sequence is the whole story of "metric-driven autoscaling has a
 ceiling, and your alerts should know about it."
@@ -89,7 +91,7 @@ high for longer? Does the HPA's "scaling event" history show repeated
 considerations?
 
 ```bash
-kubectl -n $MY_NAMESPACE describe hpa keda-hpa-vllm-qwen05b | tail -30
+kubectl -n $MY_NAMESPACE describe hpa keda-hpa-vllm-qwen3 | tail -30
 ```
 
 Next: [05 — Scenario 3: Agentic](05-agentic.md)

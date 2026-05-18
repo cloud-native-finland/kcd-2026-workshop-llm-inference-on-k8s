@@ -17,13 +17,13 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: vllm-qwen05b-engine
+  name: vllm-qwen3-engine
   labels:
     app.kubernetes.io/part-of: vllm-stack
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: qwen05b
+      app.kubernetes.io/name: qwen3
       app.kubernetes.io/component: serving-engine
       app.kubernetes.io/part-of: vllm-stack

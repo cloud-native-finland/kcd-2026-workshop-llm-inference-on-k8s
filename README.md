@@ -1,11 +1,12 @@
 # Running LLM Inference in Kubernetes
 
-A hands-on, 2-hour workshop. Your group gets a namespace on a pre-provisioned
-GKE cluster. You deploy the [vLLM Production
-Stack](https://github.com/vllm-project/production-stack) into your namespace,
-put it under three realistic loads — conversational, batch, and agentic —
-and watch the system through Prometheus + Grafana. By the end you'll know
-how to read a vLLM-on-Kubernetes setup the way an operator does.
+A hands-on, 2-hour workshop. Your group gets a namespace on a
+pre-provisioned GKE Autopilot cluster. You deploy the [vLLM Production
+Stack](https://github.com/vllm-project/production-stack) into your
+namespace, put it under three realistic loads (conversational, batch,
+agentic) and watch the system through Grafana querying GKE's Managed
+Prometheus. By the end you'll know how to read a vLLM-on-Kubernetes
+setup the way an operator does.
 
 ## Before the workshop
 
@@ -17,8 +18,9 @@ You need on your laptop:
 - A kubeconfig pointing at the workshop cluster (handed out at the start)
 - Your assigned group namespace (e.g. `group-alpha`) — also handed out
 
-The cluster already has GPU nodes, the NVIDIA driver, KEDA, and a shared
-kube-prometheus-stack. You do not need a GCP account.
+The cluster already has KEDA, Grafana, GKE Managed Prometheus, and a
+ComputeClass that will auto-provision GPU nodes when your pods land. You
+do not need a GCP account.
 
 ## Run order
 
@@ -42,20 +44,23 @@ export MY_NAMESPACE=group-XX     # what you were assigned
 
 ## What gets deployed into your namespace
 
-- **vLLM serving engine** running `Qwen/Qwen2.5-0.5B-Instruct` — small enough
-  to load in seconds, so we spend our time on the *system*, not on weights.
+- **vLLM serving engine** running `Qwen/Qwen3-0.6B` — small enough to
+  load in seconds, so we spend our time on the *system*, not on weights.
+  Weights load from a shared GCS bucket via gcsfuse (no HF Hub during
+  the workshop).
 - **Router** with prefix-aware routing — Scenario 1 actually exercises it.
 - **KEDA ScaledObject** scaling on `vllm:num_requests_waiting` (queue depth).
-- **PrometheusRule** with two alerts (`vLLMQueueDeep`, `vLLMEngineDown`) —
-  auto-tenant-scoped to your namespace by the Prometheus operator.
-- **PodDisruptionBudget** keeping at least one engine pod available across
-  voluntary disruptions.
+- **GMP `Rules`** with two alerts (`VLLMQueueDeep`, `VLLMEngineDown`) —
+  auto-tenant-scoped to your namespace by the GMP operator.
+- **PodDisruptionBudget** keeping at least one engine pod available
+  across voluntary disruptions.
 - **Grafana dashboard ConfigMaps** (chart-bundled) — the cluster's Grafana
   sidecar imports them on the fly.
 
-The Grafana, Prometheus, and Alertmanager you use are **cluster-wide** —
-every group sees the same Grafana, with their own dashboards and alerts
-visible alongside everyone else's.
+The cluster's single L4 GPU is **time-shared 8 ways**, so every group's
+engine pod can run simultaneously. The Grafana and GMP query frontend
+you use are **cluster-wide** — every group sees the same Grafana, with
+their own dashboards and alerts visible alongside everyone else's.
 
 ## Layout
 

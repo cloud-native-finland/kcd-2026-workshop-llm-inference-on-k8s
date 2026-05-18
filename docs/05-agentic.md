@@ -39,8 +39,8 @@ load/.venv/bin/python load/scenario3_agentic.py --agents 10 --steps 15
 
 ## Try this
 
-Crank concurrency to 30 (`--agents 30`). At some point a single 0.5B
-replica on one GPU runs out of decode budget and waiting requests start
+Crank concurrency to 30 (`--agents 30`). At some point a single 0.6B
+replica on one time-shared GPU slot runs out of decode budget and waiting requests start
 to pile up. Where is that point on *your* cluster? That's your effective
 capacity for this workload shape.
 

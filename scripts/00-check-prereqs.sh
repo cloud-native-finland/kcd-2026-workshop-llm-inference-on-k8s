@@ -46,10 +46,15 @@ fi
 
 echo
 echo "== Cluster-wide infra =="
-if kubectl -n monitoring get svc kube-prom-stack-grafana >/dev/null 2>&1; then
+if kubectl -n monitoring get svc grafana >/dev/null 2>&1; then
   echo "  ✓ Grafana service is up in the monitoring namespace"
 else
   echo "  ⚠ Grafana service not found — observability scenarios won't work"
+fi
+if kubectl -n monitoring get svc gmp-frontend >/dev/null 2>&1; then
+  echo "  ✓ GMP query frontend is up"
+else
+  echo "  ⚠ GMP frontend not found — KEDA scaling and Grafana queries won't work"
 fi
 if kubectl get crd scaledobjects.keda.sh >/dev/null 2>&1; then
   echo "  ✓ KEDA CRDs are installed"
@@ -59,12 +64,14 @@ fi
 
 echo
 echo "== GPU capacity =="
-gpu_count=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' 2>/dev/null | awk '{ s+=$1 } END { print s+0 }')
-if [[ "$gpu_count" -gt 0 ]]; then
-  echo "  ✓ ${gpu_count} GPU(s) available in cluster"
+# On GKE Autopilot, GPU nodes are created on-demand when a Pod requests
+# them. Before anyone has deployed vLLM, no GPU nodes exist — that's
+# expected, not an error. Check the ComputeClass instead, which tells
+# us the cluster *can* provision an L4 on demand.
+if kubectl get computeclass.cloud.google.com vllm-gpu-l4-spot >/dev/null 2>&1; then
+  echo "  ✓ vllm-gpu-l4-spot ComputeClass is installed"
 else
-  echo "  ✗ no nvidia.com/gpu reported by any node — vLLM will stay Pending"
-  fail=1
+  echo "  ⚠ vllm-gpu-l4-spot ComputeClass missing — vLLM pods will stay Pending"
 fi
 
 echo

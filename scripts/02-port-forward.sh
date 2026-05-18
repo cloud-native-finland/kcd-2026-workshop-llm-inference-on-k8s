@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Open the port-forwards you need during the workshop. The router is in
-# YOUR namespace; Grafana and Prometheus are cluster-wide (in `monitoring`).
+# YOUR namespace; Grafana and the GMP query frontend are cluster-wide
+# (in `monitoring`).
 #
 #   localhost:30080 → vLLM router (OpenAI-compatible API) — YOUR namespace
 #   localhost:3000  → Grafana                              (admin / prom-operator)
-#   localhost:9090  → Prometheus
-#   localhost:9093  → Alertmanager
+#   localhost:9090  → GMP query frontend                   (Prometheus API on GMP)
 #
 # Ctrl-C to stop.
 
@@ -20,16 +20,14 @@ trap cleanup EXIT INT TERM
 
 echo "== Port-forwarding (Ctrl-C to stop) =="
 kubectl -n "$MY_NAMESPACE" port-forward svc/vllm-router-service 30080:80 >/tmp/pf-router.log 2>&1 &
-kubectl -n monitoring port-forward svc/kube-prom-stack-grafana 3000:80 >/tmp/pf-grafana.log 2>&1 &
-kubectl -n monitoring port-forward svc/prometheus-operated 9090:9090 >/tmp/pf-prom.log 2>&1 &
-kubectl -n monitoring port-forward svc/alertmanager-operated 9093:9093 >/tmp/pf-alertmanager.log 2>&1 &
+kubectl -n monitoring port-forward svc/grafana 3000:80 >/tmp/pf-grafana.log 2>&1 &
+kubectl -n monitoring port-forward svc/gmp-frontend 9090:9090 >/tmp/pf-gmp.log 2>&1 &
 
 sleep 2
 echo
 echo "  Router (OpenAI API):  http://localhost:30080   (namespace: $MY_NAMESPACE)"
 echo "  Grafana:              http://localhost:3000   (admin / prom-operator)"
-echo "  Prometheus:           http://localhost:9090"
-echo "  Alertmanager:         http://localhost:9093"
+echo "  GMP frontend:         http://localhost:9090   (Prometheus API)"
 echo
-echo "Logs: /tmp/pf-router.log /tmp/pf-grafana.log /tmp/pf-prom.log /tmp/pf-alertmanager.log"
+echo "Logs: /tmp/pf-router.log /tmp/pf-grafana.log /tmp/pf-gmp.log"
 wait

@@ -1,94 +1,137 @@
 # vLLM Production Stack — workshop values for ONE attendee group.
 #
-# The workshop infra repo (kcd-26-ws-llmsonk8s-infra) provisions the cluster
-# with two node pools:
-#   - mgmt nodes labeled  app=mgmt-node
-#   - GPU  nodes labeled  app=vllm-inference  (taint nvidia.com/gpu=present:NoSchedule)
-# and pre-installs kube-prometheus-stack + KEDA cluster-wide. The cluster's
-# Prometheus already has an `additionalServiceMonitors` rule that scrapes any
-# vLLM Helm release based on its default labels, so we do NOT enable a
-# per-release ServiceMonitor here.
+# The workshop runs on a GKE Autopilot cluster with cluster-wide:
+#   - GMP managed Prometheus (auto-app-monitoring, scope=ALL)
+#   - GMP query frontend in `monitoring`
+#   - Grafana in `monitoring` (datasource = GMP frontend, sidecar
+#     watching all namespaces for `grafana_dashboard: "1"` ConfigMaps)
+#   - KEDA controller in `keda`
+#   - Stackdriver Adapter exposing GMP metrics as custom.metrics.k8s.io
+#   - A shared GCS bucket holding the model weights, plus a per-namespace
+#     `vllm-engine` ServiceAccount annotated for Workload Identity to read
+#     the bucket.
 #
 # Install (replace $MY_NAMESPACE with the namespace your group was assigned):
 #   helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml
+#
+# Note on sharing: the workshop cluster has ONE physical L4 GPU, time-sliced
+# 8 ways. Up to 8 engine pods (yours + everyone else's) can land on it. Each
+# pod reserves ~3.6 GiB VRAM (gpuMemoryUtilization=0.15 of 24 GiB), enough
+# for Qwen3-0.6B weights + KV cache for the workshop's request volume.
 
 servingEngineSpec:
+  # Autopilot rejects custom runtime classes.
   runtimeClassName: ""
-  # Engine runs on the GPU node pool. The cluster has only one GPU today,
-  # so each group's deployment will land on it (KEDA + GPU time-sharing
-  # decide who gets to run when contention is high).
-  nodeSelector:
-    app: vllm-inference
-    nvidia.com/gpu: present
-    cloud.google.com/gke-accelerator: nvidia-l4
-    cloud.google.com/gke-gpu-sharing-strategy: "time-sharing"
-    cloud.google.com/gke-max-shared-clients-per-gpu: "4"
-  tolerations:
-    - key: "nvidia.com/gpu"
-      operator: "Equal"
-      value: "present"
-      effect: "NoSchedule"
 
   modelSpec:
-    - name: "qwen05b"
+    - name: "qwen3"
       enabled: true
       runtimeClassName: ""
       repository: "vllm/vllm-openai"
-      tag: "latest"
-      modelURL: "Qwen/Qwen2.5-0.5B-Instruct"
+      tag: "v0.19.1"
+      modelURL: "Qwen/Qwen3-0.6B"
 
       replicaCount: 1
 
-      requestCPU: 4
-      requestMemory: "12Gi"
+      # Sized to fit alongside ~7 other engines on one g2-standard-12
+      # (12 vCPU, 48 GiB). 500m CPU / 2 GiB RAM is plenty for Qwen3-0.6B
+      # steady-state (token encode/decode + scheduling).
+      requestCPU: 500m
+      requestMemory: "2Gi"
       requestGPU: 1
       requestGPUType: "nvidia.com/gpu"
 
-      pvcStorage: "20Gi"
-      pvcAccessMode:
-        - ReadWriteOnce
+      # WI-annotated KSA created by the infra repo. Lets this pod mount
+      # the shared GCS model bucket read-only via gcsfuse below.
+      serviceAccountName: vllm-engine
+
+      podAnnotations:
+        gke-gcsfuse/volumes: "true"
+
+      # Shared HF model cache mounted from GCS. Cluster admin pre-uploads
+      # weights once with `make upload-model` on the infra side; pods then
+      # load from cache (no HF Hub round-trips during the workshop).
+      # HF_HUB_OFFLINE=1 makes vLLM fail loud on a cache miss instead of
+      # silently falling back to anon-rate-limited HF downloads.
+      extraVolumes:
+        - name: models-cache
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
+            volumeAttributes:
+              bucketName: kcd-hki-2026-ws-llms-vllm-models
+              mountOptions: "implicit-dirs"
+      extraVolumeMounts:
+        - name: models-cache
+          mountPath: /models
+          readOnly: true
+      env:
+        - name: HF_HUB_CACHE
+          value: /models
+        - name: HF_HUB_OFFLINE
+          value: "1"
+
+      # Compute-class + GPU sharing labels pin this to the Spot L4 pool
+      # provisioned by the infra repo's `vllm-gpu-l4-spot` ComputeClass.
+      # GPU model + count are declared by the ComputeClass itself; the pod
+      # only opts into time-sharing.
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: cloud.google.com/compute-class
+              operator: In
+              values: [vllm-gpu-l4-spot]
+            - key: cloud.google.com/gke-gpu-sharing-strategy
+              operator: In
+              values: [time-sharing]
+            - key: cloud.google.com/gke-max-shared-clients-per-gpu
+              operator: In
+              values: ["8"]
 
       vllmConfig:
         v0: "0"
         enablePrefixCaching: true
         enableChunkedPrefill: true
-        maxModelLen: 4096
+        maxModelLen: 8192
         dtype: "bfloat16"
         tensorParallelSize: 1
-        gpuMemoryUtilization: 0.85
+        # 8 × 0.15 = 1.2 of L4 24 GiB. Oversubscribed on paper, but
+        # Qwen3-0.6B's actual VRAM footprint is well under 3 GiB even with
+        # KV cache, so the math works out at workshop request volumes.
+        gpuMemoryUtilization: 0.15
         extraArgs: []
 
       lmcacheConfig:
         enabled: false
 
 routerSpec:
+  enableRouter: true
   replicaCount: 1
-  # Router doesn't need a GPU — schedule onto the management node pool so
-  # the GPU is reserved exclusively for the engine.
-  nodeSelector:
-    app: mgmt-node
+  serviceType: ClusterIP
+  servicePort: 80
   routingLogic: "prefixaware"
+  serviceDiscovery: "k8s"
   resources:
     requests:
-      cpu: "200m"
-      memory: "512Mi"
+      cpu: "500m"
+      memory: "768Mi"
     limits:
-      memory: "1Gi"
-  # Chart default failureThreshold=3 + periodSeconds=5 gives the router only
-  # ~20s to bind to :8000 on cold start. The image is 5.3 GB and aiohttp/
-  # service-discovery init pushes that out to ~30 s. Give it 24×5 s = 120 s.
+      memory: "768Mi"
+  # Router image (lmcache/lmstack-router:latest, ~5.3 GiB Python) imports
+  # under CPU throttling need ~30–60s before uvicorn binds :8000. Chart
+  # defaults (5s + 3×5s = 20s) SIGKILL silently before then.
+  # 15s + 18×10s = 195s tolerates cold-image starts comfortably.
   startupProbe:
-    initialDelaySeconds: 5
-    periodSeconds: 5
-    failureThreshold: 24
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    failureThreshold: 18
     httpGet:
       path: /health
       port: router-port
 
 # Deploy the chart's bundled Grafana dashboards as ConfigMaps labeled
-# `grafana_dashboard: "1"` in this namespace. The cluster's Grafana runs a
-# sidecar configured (in the infra repo) to watch every namespace for that
-# label, so they appear in the shared Grafana under Dashboards → General
-# within a minute of `helm install`.
+# `grafana_dashboard: "1"` in this namespace. The cluster's Grafana runs
+# a sidecar (configured in the infra repo) to watch every namespace for
+# that label, so they appear in the shared Grafana under
+# Dashboards → General within a minute of `helm install`.
 grafanaDashboards:
   enabled: true

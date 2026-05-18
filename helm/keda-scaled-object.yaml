@@ -1,21 +1,24 @@
-# KEDA ScaledObject — autoscale the vLLM deployment on queue depth.
+# KEDA ScaledObject — autoscale the vLLM engine deployment on queue depth.
 #
 # Targets the deployment created by the Helm chart for the model named
-# "qwen05b" in values-workshop.yaml (chart names it vllm-qwen05b-deployment-vllm).
+# "qwen3" in values-workshop.yaml (chart names it vllm-qwen3-deployment-vllm).
 #
 # minReplicaCount=1 / maxReplicaCount=2 means Scenario 2 (batch burst) will
-# scale 1 → 2 when ≥ 5 requests sit in the vLLM queue. The workshop cluster
-# needs at least 2 GPUs for this to fully demonstrate; on a single-GPU test
-# cluster the second replica will stay Pending — that itself is a useful
-# teaching moment about GPU capacity.
+# scale 1 → 2 when ≥ 5 requests sit in the vLLM queue. The workshop's single
+# physical L4 is time-sliced 8 ways, so a second replica can land alongside
+# yours and the rest of the cohort's; if all 8 slots are taken, the second
+# replica stays Pending — that itself is a useful teaching moment about
+# capacity vs autoscaler intent.
+#
+# serverAddress points at the GMP query frontend (Prometheus-compatible API
+# in front of GKE's managed Prometheus, which is where vllm:* metrics live).
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: vllm-qwen05b
-  namespace: default
+  name: vllm-qwen3
 spec:
   scaleTargetRef:
-    name: vllm-qwen05b-deployment-vllm
+    name: vllm-qwen3-deployment-vllm
   minReplicaCount: 1
   maxReplicaCount: 2
   pollingInterval: 15
@@ -23,7 +26,7 @@ spec:
   triggers:
     - type: prometheus
       metadata:
-        serverAddress: http://prometheus-operated.monitoring.svc:9090
+        serverAddress: http://gmp-frontend.monitoring.svc:9090
         metricName: vllm:num_requests_waiting
         query: sum(vllm:num_requests_waiting)
         threshold: "5"

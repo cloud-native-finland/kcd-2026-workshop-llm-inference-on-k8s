@@ -2,10 +2,14 @@
 
 The cluster admin has already done the cluster-wide work for you:
 
-- GKE cluster with mgmt + GPU node pools
-- NVIDIA GPU driver
-- kube-prometheus-stack (Prometheus + Grafana) in `monitoring`
+- GKE Autopilot cluster (nodes appear on demand when pods schedule)
+- NVIDIA GPU driver (installed automatically on the L4 node when your
+  pod requests one)
+- GKE Managed Prometheus + a query frontend in `monitoring`
+- Grafana in `monitoring` (datasource pointed at GMP)
 - KEDA controller in `keda`
+- A shared GCS bucket holding the model weights, plus a `vllm-engine`
+  ServiceAccount in your namespace already wired up to read it
 - Your group namespace + RBAC
 
 You only deploy the vLLM Helm chart into your namespace.
@@ -31,17 +35,19 @@ That script does four things — read it before you run it, it's short:
 
 1. `helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml`
 2. `kubectl -n $MY_NAMESPACE apply -f helm/keda-scaled-object.yaml`
-3. `kubectl -n $MY_NAMESPACE apply -f helm/prometheus-rule.yaml`
+3. `kubectl -n $MY_NAMESPACE apply -f helm/gmp-rules.yaml`
 4. `kubectl -n $MY_NAMESPACE apply -f helm/pdb.yaml`
 
 (1) installs the engine + router. (2) tells KEDA to scale on queue depth.
-(3) wires per-namespace alerts into the cluster's Prometheus. (4) protects
-your engine from full-outage voluntary disruptions like a node drain. The
-last three are all per-group artifacts the workshop cluster's RBAC lets
-you create in your own namespace.
+(3) wires per-namespace alerts into the cluster's Managed Prometheus.
+(4) protects your engine from full-outage voluntary disruptions like a
+node drain. The last three are all per-group artifacts the workshop
+cluster's RBAC lets you create in your own namespace.
 
-The slow part is the engine pod pulling the vLLM image (~12 GB) and
-downloading the model weights. Give it a few minutes.
+The slow part is the engine pod pulling the vLLM image (~12 GB). Model
+weights themselves load from the shared GCS bucket via a gcsfuse mount,
+so you don't pay the HF Hub download cost. Give it a few minutes for the
+image to land on a freshly-provisioned GPU node.
 
 ## Verify
 
@@ -53,13 +59,13 @@ You should see two pods Ready:
 
 ```
 vllm-deployment-router-xxxxx              1/1   Running
-vllm-qwen05b-deployment-vllm-xxxxx        1/1   Running
+vllm-qwen3-deployment-vllm-xxxxx        1/1   Running
 ```
 
 Sanity-check that the engine actually got the GPU:
 
 ```bash
-kubectl -n $MY_NAMESPACE get pod -l model=qwen05b \
+kubectl -n $MY_NAMESPACE get pod -l model=qwen3 \
   -o jsonpath='{.items[0].spec.containers[0].resources}' | jq
 ```
 
@@ -69,7 +75,7 @@ Tail the engine logs while it's loading — a great way to see what vLLM is
 doing at startup:
 
 ```bash
-kubectl -n $MY_NAMESPACE logs -l model=qwen05b -f --tail=200
+kubectl -n $MY_NAMESPACE logs -l model=qwen3 -f --tail=200
 ```
 
 You're looking for:
@@ -88,8 +94,7 @@ Leave this running in a separate terminal:
 
 - `localhost:30080` → your router (OpenAI-compatible API)
 - `localhost:3000`  → Grafana (admin / prom-operator)
-- `localhost:9090`  → Prometheus
-- `localhost:9093`  → Alertmanager
+- `localhost:9090`  → GMP query frontend (Prometheus API on GMP)
 
 ## Smoke-test
 
