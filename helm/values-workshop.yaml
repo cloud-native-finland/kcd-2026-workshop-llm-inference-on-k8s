@@ -61,13 +61,13 @@ servingEngineSpec:
         v0: "0"
         enablePrefixCaching: true
         enableChunkedPrefill: true
-        maxModelLen: 8192
+        maxModelLen: 4096
         dtype: "bfloat16"
         tensorParallelSize: 1
         # 8 × 0.15 = 1.2 of L4 24 GiB. Oversubscribed on paper, but
         # Qwen3-0.6B's actual VRAM footprint is well under 3 GiB even with
         # KV cache, so the math works out at workshop request volumes.
-        gpuMemoryUtilization: 0.15
+        gpuMemoryUtilization: 0.1
         extraArgs: []
 
       lmcacheConfig:
