@@ -2,8 +2,10 @@
 # Deploy vLLM into your group's namespace.
 #
 # The cluster admin has pre-installed KEDA + Grafana + GKE Managed
-# Prometheus cluster-wide. You only deploy the vLLM engine + router and
-# the per-namespace autoscaling/alerts/PDB artifacts.
+# Prometheus cluster-wide, plus the vllm-stack CRDs (LoraAdapter). You
+# only deploy the vLLM engine + router and the per-namespace
+# autoscaling/alerts/PDB artifacts — hence `--skip-crds` below, since
+# participants don't have cluster-scoped permissions.
 #
 # Required:
 #   MY_NAMESPACE   your assigned group namespace (e.g. group-alpha)
@@ -21,6 +23,7 @@ helm repo update vllm >/dev/null
 
 helm upgrade --install vllm vllm/vllm-stack \
   --namespace "$MY_NAMESPACE" \
+  --skip-crds \
   -f "$REPO_ROOT/helm/values-workshop.yaml" \
   --wait --timeout 15m
 
