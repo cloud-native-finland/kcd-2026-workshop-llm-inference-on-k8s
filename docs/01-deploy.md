@@ -8,8 +8,6 @@ The cluster admin has already done the cluster-wide work for you:
 - GKE Managed Prometheus + a query frontend in `monitoring`
 - Grafana in `monitoring` (datasource pointed at GMP)
 - KEDA controller in `keda`
-- A shared GCS bucket holding the model weights, plus a `vllm-engine`
-  ServiceAccount in your namespace already wired up to read it
 - Your group namespace + RBAC
 
 You only deploy the vLLM Helm chart into your namespace.
@@ -44,9 +42,9 @@ That script does four things — read it before you run it, it's short:
 node drain. The last three are all per-group artifacts the workshop
 cluster's RBAC lets you create in your own namespace.
 
-The slow part is the engine pod pulling the vLLM image (~12 GB). Model
-weights themselves load from the shared GCS bucket via a gcsfuse mount,
-so you don't pay the HF Hub download cost. Give it a few minutes for the
+The slow part is the engine pod pulling the vLLM image (~12 GB). On top
+of that, the pod pulls Qwen3-0.6B weights from HuggingFace Hub on first
+start (~1.2 GB, public — no token needed). Give it a few minutes for the
 image to land on a freshly-provisioned GPU node.
 
 ## Verify

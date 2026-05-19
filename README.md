@@ -46,8 +46,8 @@ export MY_NAMESPACE=group-XX     # what you were assigned
 
 - **vLLM serving engine** running `Qwen/Qwen3-0.6B` — small enough to
   load in seconds, so we spend our time on the *system*, not on weights.
-  Weights load from a shared GCS bucket via gcsfuse (no HF Hub during
-  the workshop).
+  Weights are pulled from HuggingFace Hub on first pod start (~1.2 GB,
+  public — no token needed).
 - **Router** with prefix-aware routing — Scenario 1 actually exercises it.
 - **KEDA ScaledObject** scaling on `vllm:num_requests_waiting` (queue depth).
 - **GMP `Rules`** with two alerts (`VLLMQueueDeep`, `VLLMEngineDown`) —

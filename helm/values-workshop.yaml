@@ -7,9 +7,10 @@
 #     watching all namespaces for `grafana_dashboard: "1"` ConfigMaps)
 #   - KEDA controller in `keda`
 #   - Stackdriver Adapter exposing GMP metrics as custom.metrics.k8s.io
-#   - A shared GCS bucket holding the model weights, plus a per-namespace
-#     `vllm-engine` ServiceAccount annotated for Workload Identity to read
-#     the bucket.
+#
+# Model weights (Qwen/Qwen3-0.6B, ~1.2 GiB, public) are pulled directly
+# from HuggingFace Hub at pod startup. Cold-start adds ~30–60s per pod
+# vs. the bucket approach, but avoids per-project bucket setup.
 #
 # Install (replace $MY_NAMESPACE with the namespace your group was assigned):
 #   helm install vllm vllm/vllm-stack -n $MY_NAMESPACE -f helm/values-workshop.yaml
@@ -40,36 +41,6 @@ servingEngineSpec:
       requestMemory: "2Gi"
       requestGPU: 1
       requestGPUType: "nvidia.com/gpu"
-
-      # WI-annotated KSA created by the infra repo. Lets this pod mount
-      # the shared GCS model bucket read-only via gcsfuse below.
-      serviceAccountName: vllm-engine
-
-      podAnnotations:
-        gke-gcsfuse/volumes: "true"
-
-      # Shared HF model cache mounted from GCS. Cluster admin pre-uploads
-      # weights once with `make upload-model` on the infra side; pods then
-      # load from cache (no HF Hub round-trips during the workshop).
-      # HF_HUB_OFFLINE=1 makes vLLM fail loud on a cache miss instead of
-      # silently falling back to anon-rate-limited HF downloads.
-      extraVolumes:
-        - name: models-cache
-          csi:
-            driver: gcsfuse.csi.storage.gke.io
-            readOnly: true
-            volumeAttributes:
-              bucketName: kcd-hki-2026-ws-llms-vllm-models
-              mountOptions: "implicit-dirs"
-      extraVolumeMounts:
-        - name: models-cache
-          mountPath: /models
-          readOnly: true
-      env:
-        - name: HF_HUB_CACHE
-          value: /models
-        - name: HF_HUB_OFFLINE
-          value: "1"
 
       # ComputeClass selects the Spot L4 pool (defined in the infra repo
       # as `vllm-gpu-l4-spot`). GPU time-sharing config — strategy + max
